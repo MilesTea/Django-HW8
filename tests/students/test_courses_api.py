@@ -4,7 +4,7 @@ import pytest
 from django.contrib.auth.models import User
 from model_bakery import baker
 from rest_framework.test import APIClient
-
+import ast
 from students.models import Course, Student
 
 api_url = '/api/v1/'
@@ -44,8 +44,7 @@ def test_courses_get_one(client, user, course_factory):
     assert response.status_code == 200
 
     data = response.json()
-    for i, data_course in enumerate(data):
-        assert data_course['name'] == course[i].name
+    assert data[0]['name'] == course[0].name
 
 
 @pytest.mark.django_db
@@ -61,82 +60,69 @@ def test_courses_get_many(client, user, course_factory):
 
 @pytest.mark.django_db
 def test_courses_filter_id(client, user, course_factory):
-    course_id = random.randint(1, max_courses)
     course = course_factory(_quantity=max_courses)
+    required_course = course[random.randint(0, max_courses)]
 
-    response = client.get(api_url + 'courses/', data={'id': course_id})
+    response = client.get(api_url + 'courses/', data={'id': required_course.id})
     assert response.status_code == 200
 
     data = response.json()
     assert len(data) == 1
-    assert data[0]['id'] == course[course_id-1].id
+    assert data[0]['id'] == required_course.id
 
 
 @pytest.mark.django_db
 def test_courses_filter_name(client, user, course_factory):
-    course_id = random.randint(1, max_courses)
     course = course_factory(_quantity=max_courses)
+    required_course = course[random.randint(0, max_courses - 1)]
 
-    response = client.get(api_url + 'courses/', data={'id': course_id})
+    response = client.get(api_url + 'courses/', data={'name': required_course.name})
     assert response.status_code == 200
 
     data = response.json()
     assert len(data) == 1
-    assert data[0]['name'] == course[course_id-1].name
+    assert data[0]['name'] == required_course.name
 
 
 @pytest.mark.django_db
 def test_courses_post(client, user):
-    len_courses = len(client.get(api_url + 'courses/').json())
-    course_data = {'name': 'test_course'}
-    assert client.post(api_url + 'courses/', data=course_data, format='json').status_code == 201
-
-    response = client.get(api_url + 'courses/')
-    assert response.status_code == 200
-
-    data = response.json()
-    assert len(data) - 1 == len_courses
+    count = Course.objects.count()
+    course_raw_data = {'name': 'test_course'}
+    assert client.post(api_url + 'courses/', data=course_raw_data, format='json').status_code == 201
+    assert Course.objects.count() == count + 1
 
 
 @pytest.mark.django_db
 def test_courses_patch(client, user):
-    course_data = {'name': 'test_course'}
-    assert client.post(api_url + 'courses/', data=course_data, format='json').status_code == 201
+    count = Course.objects.count()
+    course_raw_data = {'name': 'test_course'}
+    course_new_raw_data = {'name': 'redacted_course'}
 
-    response = client.get(api_url + 'courses/', data=course_data, format='json')
-    assert response.status_code == 200
+    # Создание объекта
+    response = client.post(api_url + 'courses/', data=course_raw_data, format='json')
+    assert response.status_code == 201
+    assert Course.objects.count() == count + 1
+    course_required = ast.literal_eval(response.content.decode('utf-8'))
 
-    data = response.json()
-    assert data[0]['name'] == course_data['name']
-
-    course_id = data[0]['id']
-    new_course_data = {'name': 'redacted_course'}
-    assert client.patch(api_url + f'courses/{course_id}/', data=new_course_data, format='json').status_code == 200
-
-    new_response = client.get(api_url + 'courses/', data=new_course_data, format='json')
+    # Изменение объекта
+    new_response = client.patch(api_url + f'courses/{course_required["id"]}/', data=course_new_raw_data, format='json')
     assert new_response.status_code == 200
+    new_course = ast.literal_eval(new_response.content.decode('utf-8'))
 
-    new_data = new_response.json()
-    assert new_data[0]['name'] == new_course_data['name']
+    assert new_course['name'] == course_new_raw_data['name']
 
 
 @pytest.mark.django_db
 def test_courses_delete(client, user):
-    len_courses = len(client.get(api_url + 'courses/').json())
-    course_data = {'name': 'test_course'}
-    assert client.post(api_url + 'courses/', data=course_data, format='json').status_code == 201
+    count = Course.objects.count()
+    course_raw_data = {'name': 'test_course'}
 
-    response = client.get(api_url + 'courses/')
-    assert response.status_code == 200
+    # Создание объекта
+    response = client.post(api_url + 'courses/', data=course_raw_data, format='json')
+    assert response.status_code == 201
+    assert Course.objects.count() == count + 1
+    course_required = ast.literal_eval(response.content.decode('utf-8'))
 
-    data = response.json()
-    assert len(data) - 1 == len_courses
-
-    course_id = data[0]['id']
-    assert client.delete(api_url + f'courses/{course_id}/').status_code == 204
-
-    new_response = client.get(api_url + 'courses/')
-    assert new_response.status_code == 200
-
-    new_data = new_response.json()
-    assert len(new_data) == len_courses
+    # Удаление объекта
+    assert client.delete(api_url + f'courses/{course_required["id"]}/').status_code == 204
+    assert Course.objects.count() == count
