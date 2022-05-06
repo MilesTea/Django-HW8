@@ -40,11 +40,11 @@ def student_factory():
 @pytest.mark.django_db
 def test_courses_get_one(client, user, course_factory):
     course = course_factory(_quantity=1)
-    response = client.get(api_url + 'courses/')
+    response = client.get(api_url + f'courses/{course[0].id}/')
     assert response.status_code == 200
 
     data = response.json()
-    assert data[0]['name'] == course[0].name
+    assert data['name'] == course[0].name
 
 
 @pytest.mark.django_db
@@ -61,7 +61,7 @@ def test_courses_get_many(client, user, course_factory):
 @pytest.mark.django_db
 def test_courses_filter_id(client, user, course_factory):
     course = course_factory(_quantity=max_courses)
-    required_course = course[random.randint(0, max_courses)]
+    required_course = course[random.randint(0, max_courses - 1)]
 
     response = client.get(api_url + 'courses/', data={'id': required_course.id})
     assert response.status_code == 200
@@ -93,19 +93,16 @@ def test_courses_post(client, user):
 
 
 @pytest.mark.django_db
-def test_courses_patch(client, user):
+def test_courses_patch(client, user, course_factory):
     count = Course.objects.count()
     course_raw_data = {'name': 'test_course'}
     course_new_raw_data = {'name': 'redacted_course'}
 
     # Создание объекта
-    response = client.post(api_url + 'courses/', data=course_raw_data, format='json')
-    assert response.status_code == 201
-    assert Course.objects.count() == count + 1
-    course_required = ast.literal_eval(response.content.decode('utf-8'))
+    course_required = course_factory(_quantity=1, name=course_raw_data['name'])
 
     # Изменение объекта
-    new_response = client.patch(api_url + f'courses/{course_required["id"]}/', data=course_new_raw_data, format='json')
+    new_response = client.patch(api_url + f'courses/{course_required[0].id}/', data=course_new_raw_data, format='json')
     assert new_response.status_code == 200
     new_course = ast.literal_eval(new_response.content.decode('utf-8'))
 
@@ -113,16 +110,13 @@ def test_courses_patch(client, user):
 
 
 @pytest.mark.django_db
-def test_courses_delete(client, user):
+def test_courses_delete(client, user, course_factory):
     count = Course.objects.count()
     course_raw_data = {'name': 'test_course'}
 
     # Создание объекта
-    response = client.post(api_url + 'courses/', data=course_raw_data, format='json')
-    assert response.status_code == 201
-    assert Course.objects.count() == count + 1
-    course_required = ast.literal_eval(response.content.decode('utf-8'))
+    course_required = course_factory(_quantity=1, name=course_raw_data['name'])
 
     # Удаление объекта
-    assert client.delete(api_url + f'courses/{course_required["id"]}/').status_code == 204
+    assert client.delete(api_url + f'courses/{course_required[0].id}/').status_code == 204
     assert Course.objects.count() == count
